@@ -1,11 +1,40 @@
 
-[this_repo_dir, ~, ~] = fileparts(mfilename('fullpath'));
+this_file_path = mfilename('fullpath');
+startup_line = sprintf(char("run('%s')"), this_file_path);
+startup_fname = fullfile(userpath(), 'startup.m');
+
+if ~ exist(startup_fname, 'file')
+    fid = fopen(startup_fname, 'wt');
+    fprintf(fid, '%s\n', startup_line);
+    fclose(fid);
+else
+    fid = fopen(startup_fname, 'rt');
+    found_line = false;
+    while true
+        line = fgetl(fid);
+        % fgetl return -1 when EOF (and == -1 woudldn't work)
+        if ~ ischar(line)
+            break;
+        end
+        if strcmp(line, startup_line)
+            found_line = true;
+            break;
+        end
+    end
+    fclose(fid);
+    
+    if ~ found_line
+        fid = fopen(startup_fname, 'at');
+        fprintf(fid, '%s\n', startup_line);
+        fclose(fid);
+    end
+end
+
+[this_repo_dir, ~, ~] = fileparts(this_file_path);
 [ps1, po1] = system(['cd ' this_repo_dir '; git pull']);
 % TODO check status, and if it updated, force / prompt for restart
+disp('Checking for hong_matlab updates:')
 disp(po1)
-
-% TODO register this code at matlab startup, after other things added to
-% path, to avoid shadowing
 
 % TODO delete
 %
@@ -87,7 +116,19 @@ pyviron.get(path)
 ver_str = char(py.sys.version);
 assert(str2double(ver_str(1)) >= 3, 'Python must be version 3, but is 2');
 
+repo_name = 'python_2p_analysis';
+src_dir = '~/src';
+repo_dir = fullfile(src_dir, repo_name);
 module_name = 'hong2p.util';
+
+pulled = false;
+if exist(repo_dir, 'dir')
+    [ps2, po2] = system(['cd ' repo_dir '; git pull']);
+    disp(['Checking for ' module_name ' updates:'])
+    disp(po2)
+    pulled = true;
+end
+
 try
     module = py.importlib.import_module(module_name);
 catch err
@@ -99,26 +140,20 @@ catch err
     % TODO a few things in this section might only work on linux.
     % test on other systems.
     
-    src_dir = '~/src';
     if ~ exist(src_dir, 'dir')
         mkdir(src_dir);
     end
-
-    repo_name = 'python_2p_analysis';
-    repo_dir = fullfile(src_dir, repo_name);
     
     if ~ exist(repo_dir, 'dir')
         [status1, cmdout1] = system(['git clone https://github.com/' ...
             'ejhonglab/' repo_name ' ' repo_dir]);
     end
     
-    [ps2, po2] = system(['cd ' repo_dir '; git pull']);
-    disp(po2)
-    
-    % TODO git pull if repo there + no unstaged changes
-    % + warn if can't pull b/c unstaged changes
-    % TODO also git pull for this repo? (probably can't reload code tho...
-    % could prompt to restart matlab)
+    if ~ pulled
+        [ps2, po2] = system(['cd ' repo_dir '; git pull']);
+        disp(['Checking for ' module_name ' updates:'])
+        disp(po2)
+    end
     
     [status2, cmdout2] = system(['unset LD_LIBRARY_PATH; ' ...
         'python -m pip install -e ' repo_dir]);
@@ -162,7 +197,6 @@ for i = 1:numel(fns)
             '" would shadow a member of MATLAB workspace.'])
         disp(['To access this function, use the prefix py.' ...
            module_name '.'])
-        disp(newline)
         continue
     end
     
@@ -185,3 +219,5 @@ clear('left_idx');
 
 %abbrev = odor2abbrev('ethanol');
 %disp(abbrev)
+% TODO investigate differences w/ python-in-bash when calling
+% odor2abbrev('ethyl alcohol')
