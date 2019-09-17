@@ -174,8 +174,14 @@ end
 
 fns = fieldnames(module);
 defined_names = {};
+% Field names not to import into MATLAB namespace.
+blacklist = {'sep'};
 for i = 1:numel(fns)
     fn = fns{i};
+    if any(cellfun(@(x) strcmp(x, fn), blacklist))
+        continue
+    end
+    
     field = module.(fn);
     if isa(field, 'py.module')
         continue
