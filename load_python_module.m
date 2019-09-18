@@ -3,6 +3,10 @@ this_file_path = mfilename('fullpath');
 startup_line = sprintf(char("run('%s')"), this_file_path);
 startup_fname = fullfile(userpath(), 'startup.m');
 
+[this_repo_dir, ~, ~] = fileparts(this_file_path);
+old_path = path();
+path(this_repo_dir, old_path);
+
 if ~ exist(startup_fname, 'file')
     fid = fopen(startup_fname, 'wt');
     fprintf(fid, '%s\n', startup_line);
@@ -30,7 +34,6 @@ else
     end
 end
 
-[this_repo_dir, ~, ~] = fileparts(this_file_path);
 [ps1, po1] = system(['cd ' this_repo_dir '; git pull']);
 % TODO check status, and if it updated, force / prompt for restart
 disp('Checking for hong_matlab updates:')
@@ -57,7 +60,6 @@ setenv(path, '/home/tom/anaconda3/bin:/home/tom/bin:/home/tom/.local/bin:/usr/lo
 getenv(path)
 %}
 %
-
 %{
 ldp = 'LD_PRELOAD';
 getenv(ldp)
@@ -74,6 +76,8 @@ if exist('pyenv', 'builtin')
             rethrow(err);
         end
     end
+    pe = pyenv;
+    py3_exe = char(pe.Executable);
 else
     % TODO modify so this works on windows too. $HOME is not set there.
     conda_py3 = fullfile(getenv('HOME'), 'anaconda3/bin/python3');
@@ -101,7 +105,15 @@ else
     end
 end
 
-%keyboard;
+[ss, so] = system([py3_exe ' -c "import _ssl; [print(s) for s in ' ...
+    '_ssl.get_default_verify_paths()]"']);
+parts = splitlines(so);
+% TODO get var for whether py is loaded in each branch of if above,
+% and assert it's not loaded here, otherwise env changes won't have an
+% effect (can i set these in py while it's loaded?)
+setenv(parts{1}, parts{2});
+setenv(parts{3}, parts{4});
+
 % TODO delete
 %{
 pyviron = py.os.environ;
@@ -115,6 +127,8 @@ pyviron.get(path)
 
 ver_str = char(py.sys.version);
 assert(str2double(ver_str(1)) >= 3, 'Python must be version 3, but is 2');
+
+% TODO assert that py ssl certs are not none / some random matlab thing
 
 repo_name = 'python_2p_analysis';
 src_dir = '~/src';
@@ -206,9 +220,11 @@ for i = 1:numel(fns)
         continue
     end
     
+    %
     if isa(val, 'py.function')
         val = wrap_py_func(val);
     end
+    %
     
     eval([fn ' = val;']);
     defined_names{end + 1} = fn; %#ok<SAGROW>
